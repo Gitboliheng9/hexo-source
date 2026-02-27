@@ -132,7 +132,7 @@ process.stdin.on('data', (input) => {
   const answer = input.trim().toLowerCase();
   if (answer === 'y') {
     log("\n🚀 正在部署到 Firebase...\n");
-    run('hexo deploy');
+    run('firebase deploy --only hosting');
     log("\n🎉 部署完成！网站已成功更新\n");
     process.exit(0);
   } else {
