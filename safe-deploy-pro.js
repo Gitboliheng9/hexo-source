@@ -10,10 +10,15 @@ function log(msg) {
 }
 
 function run(cmd) {
-  execSync(cmd, { stdio: 'inherit' });
+  try {
+    execSync(cmd, { stdio: 'inherit' });
+  } catch (err) {
+    console.error(`❌ 命令执行失败：${cmd}`);
+    process.exit(1);
+  }
 }
 
-log("🔍 正在执行 Hexo 企业级部署安全检查...\n");
+log("🔍 正在执行 Hexo 安全部署检查...\n");
 
 /* ---------------------------------------------------------
    1. 检查是否在 Hexo 根目录
@@ -37,7 +42,7 @@ if (!config.includes('deploy:')) {
 log("✅ 部署配置检查通过\n");
 
 /* ---------------------------------------------------------
-   3. 检查主题是否完整
+   3. 检查主题是否存在
 --------------------------------------------------------- */
 const themeName = config.match(/theme:\s*(.*)/)?.[1]?.trim();
 if (!themeName || !exists(`./themes/${themeName}`)) {
@@ -48,13 +53,17 @@ if (!themeName || !exists(`./themes/${themeName}`)) {
 log(`🎨 主题检查通过：${themeName}\n`);
 
 /* ---------------------------------------------------------
-   4. 检查文章 front-matter 是否缺失
+   4. 检查文章 front-matter
 --------------------------------------------------------- */
 log("🔍 正在检查文章 front-matter...");
 
 const postsDir = './source/_posts';
-const postFiles = fs.readdirSync(postsDir).filter(f => f.endsWith('.md'));
+if (!exists(postsDir)) {
+  console.error("❌ 未找到 source/_posts 目录！");
+  process.exit(1);
+}
 
+const postFiles = fs.readdirSync(postsDir).filter(f => f.endsWith('.md'));
 let badPosts = [];
 
 postFiles.forEach(file => {
@@ -73,47 +82,26 @@ if (badPosts.length > 0) {
 log("✅ 所有文章 front-matter 正常\n");
 
 /* ---------------------------------------------------------
-   5. 自动备份 public（本地）
+   5. 检查 Firebase CLI
 --------------------------------------------------------- */
-log("📦 正在备份当前 public 到 backup_public.zip...\n");
-
-if (exists('./public')) {
-  run('zip -r backup_public.zip public');
-  log("✅ 本地 public 备份完成\n");
-} else {
-  log("⚠️ 未找到 public，跳过本地备份\n");
-}
-
-/* ---------------------------------------------------------
-   6. 自动备份线上 Firebase 版本
---------------------------------------------------------- */
-log("📡 正在检查 Firebase 登录状态...\n");
+log("🔍 正在检查 Firebase CLI...");
 
 try {
-  execSync('firebase login:list', { stdio: 'ignore' });
-  log("✅ Firebase 已登录\n");
+  execSync('firebase --version', { stdio: 'ignore' });
+  log("✅ Firebase CLI 已安装\n");
 } catch {
-  console.error("❌ Firebase 未登录，请先执行：firebase login");
+  console.error("❌ 未安装 Firebase CLI，请先执行：npm install -g firebase-tools");
   process.exit(1);
 }
 
-log("📦 正在备份线上版本（firebase hosting:clone）...\n");
-
-try {
-  run('firebase hosting:clone live-backup --from default');
-  log("✅ 线上版本备份完成\n");
-} catch {
-  log("⚠️ 无法备份线上版本（可能未启用 hosting:clone），继续部署\n");
-}
-
 /* ---------------------------------------------------------
-   7. 自动 clean + generate
+   6. Hexo clean + generate
 --------------------------------------------------------- */
 log("🧹 正在执行 hexo clean...");
-run('hexo clean');
+run('npx hexo clean');
 
 log("⚙️ 正在执行 hexo generate...");
-run('hexo generate');
+run('npx hexo generate');
 
 if (!exists('./public') || fs.readdirSync('./public').length === 0) {
   console.error("❌ public 生成失败，目录为空，已阻止部署！");
@@ -123,9 +111,9 @@ if (!exists('./public') || fs.readdirSync('./public').length === 0) {
 log("✅ public 生成成功\n");
 
 /* ---------------------------------------------------------
-   8. 最终确认
+   7. 最终确认
 --------------------------------------------------------- */
-log("⚠️ 即将部署到线上，是否继续？(y/n)");
+log("⚠️ 即将部署到 Firebase，是否继续？(y/n)");
 
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (input) => {
